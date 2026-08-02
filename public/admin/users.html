@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin - User Management - Bikroy Hisab</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="main">
+      <header class="topbar" id="topbar"></header>
+      <main class="content">
+        <div class="card">
+          <div class="card-title">
+            <span data-i18n="userManagement">ব্যবহারকারী ব্যবস্থাপনা</span>
+            <button class="btn btn-primary btn-sm" onclick="openUserModal()">＋ <span data-i18n="addUser">ব্যবহারকারী যোগ</span></button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th data-i18n="username">ব্যবহারকারীর নাম</th>
+                  <th data-i18n="fullName">পুরো নাম</th>
+                  <th data-i18n="role">ভূমিকা</th>
+                  <th data-i18n="status">স্ট্যাটাস</th>
+                  <th data-i18n="created">তৈরি</th>
+                  <th data-i18n="actions">অ্যাকশন</th>
+                </tr>
+              </thead>
+              <tbody id="usersTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- User modal -->
+  <div class="modal" id="userModal">
+    <div class="modal-card">
+      <div class="modal-title" id="userModalTitle" data-i18n="addUser">ব্যবহারকারী যোগ</div>
+      <input type="hidden" id="userId">
+      <div class="form-group">
+        <label data-i18n="username">ব্যবহারকারীর নাম</label>
+        <input type="text" id="uUsername" class="form-control" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label data-i18n="fullName">পুরো নাম</label>
+        <input type="text" id="uFullName" class="form-control">
+      </div>
+      <div class="form-group">
+        <label data-i18n="password">পাসওয়ার্ড</label>
+        <input type="password" id="uPassword" class="form-control" autocomplete="new-password" data-i18n-placeholder="changePassword">
+      </div>
+      <div class="form-group">
+        <label data-i18n="role">ভূমিকা</label>
+        <select id="uRole" class="form-control">
+          <option value="shopkeeper" data-i18n="shopkeeperRole">দোকানদার</option>
+          <option value="admin" data-i18n="adminRole">অ্যাডমিন</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal('userModal')" data-i18n="cancel">বাতিল</button>
+        <button class="btn btn-primary" onclick="saveUser()" data-i18n="createUser">ব্যবহারকারী তৈরি</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="confirmModal">
+    <div class="modal-card">
+      <div class="modal-title" data-i18n="confirm">নিশ্চিত করুন</div>
+      <p id="confirmModalText" style="margin-bottom:8px;"></p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="confirmModalCancel" data-i18n="cancel">বাতিল</button>
+        <button class="btn btn-danger" id="confirmModalOk" data-i18n="delete">মুছুন</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/i18n.js"></script>
+  <script src="/js/app.js"></script>
+  <script>
+    initApp('users')
+      .then(() => {
+        if (!isAdmin()) {
+          // Client-side admin check (server also enforces on /admin/users.html)
+          window.location.href = '/dashboard.html';
+          return;
+        }
+        loadUsers().catch(err => toast(err.message, 'error'));
+      })
+      .catch(err => toast(err.message, 'error'));
+
+    let users = [];
+
+    async function loadUsers() {
+      users = await API.get('/api/admin/users');
+      renderUsers();
+    }
+
+    function renderUsers() {
+      const tbody = document.getElementById('usersTable');
+      tbody.innerHTML = '';
+      const me = getCurrentUser();
+      users.forEach(u => {
+        const tr = document.createElement('tr');
+        const isSelf = me && me.id === u.id;
+        tr.innerHTML = `
+          <td style="font-weight:600;">${esc(u.username)}${isSelf ? ` (${t('yourAccount')})` : ''}</td>
+          <td>${esc(u.fullName || '—')}</td>
+          <td>${u.role === 'admin'
+            ? `<span class="badge badge-primary" data-i18n="adminRole">অ্যাডমিন</span>`
+            : `<span class="badge badge-neutral" data-i18n="shopkeeperRole">দোকানদার</span>`}</td>
+          <td>${u.active
+            ? `<span class="badge badge-success" data-i18n="active">সক্রিয়</span>`
+            : `<span class="badge badge-danger" data-i18n="disabled">নিষ্ক্রিয়</span>`}</td>
+          <td>${formatDate(u.createdAt)}</td>
+          <td style="white-space:nowrap;">
+            ${!isSelf ? `
+            <button class="btn btn-sm btn-ghost" onclick="toggleUser(${u.id})">${u.active ? t('disable') : t('enable')}</button>
+            <button class="icon-btn" title="${t('edit')}" onclick="openUserModal(${u.id})">✏️</button>
+            <button class="icon-btn danger" title="${t('delete')}" onclick="deleteUser(${u.id}, '${esc(u.username).replace(/'/g, "\\'")}')">🗑️</button>`
+            : '<span class="list-item-sub">—</span>'}
+          </td>`;
+        tbody.appendChild(tr);
+      });
+      applyI18n();
+    }
+
+    function openUserModal(id) {
+      const modal = document.getElementById('userModal');
+      document.getElementById('userId').value = id || '';
+      document.getElementById('uUsername').value = '';
+      document.getElementById('uFullName').value = '';
+      document.getElementById('uPassword').value = '';
+      document.getElementById('uRole').value = 'shopkeeper';
+      if (id) {
+        const u = users.find(x => x.id === id);
+        if (u) {
+          document.getElementById('uUsername').value = u.username;
+          document.getElementById('uFullName').value = u.fullName;
+          document.getElementById('uRole').value = u.role;
+        }
+        document.getElementById('userModalTitle').textContent = t('edit');
+        document.querySelector('#userModal .btn-primary').textContent = t('update');
+      } else {
+        document.getElementById('userModalTitle').textContent = t('addUser');
+        document.querySelector('#userModal .btn-primary').textContent = t('createUser');
+      }
+      openModal('userModal');
+    }
+
+    async function saveUser() {
+      const id = document.getElementById('userId').value;
+      const username = document.getElementById('uUsername').value.trim();
+      const password = document.getElementById('uPassword').value;
+      const fullName = document.getElementById('uFullName').value.trim();
+      const role = document.getElementById('uRole').value;
+      if (!username) { toast(t('required'), 'error'); return; }
+
+      try {
+        if (id) {
+          const body = { fullName, role };
+          if (password) body.password = password;
+          await API.put(`/api/admin/users/${id}`, body);
+        } else {
+          if (password.length < 4) { toast(t('passwordMin'), 'error'); return; }
+          await API.post('/api/admin/users', { username, password, fullName, role });
+        }
+        closeModal('userModal');
+        toast(t('saveSuccess'));
+        await loadUsers();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    async function toggleUser(id) {
+      const u = users.find(x => x.id === id);
+      try {
+        await API.put(`/api/admin/users/${id}`, { active: u.active ? 0 : 1 });
+        await loadUsers();
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
+    function deleteUser(id, username) {
+      confirmDialog(`${t('deleteUserConfirm')} (${username})`, async () => {
+        try {
+          await API.del(`/api/admin/users/${id}`);
+          toast(t('deleteSuccess'));
+          await loadUsers();
+        } catch (err) { toast(err.message, 'error'); }
+      });
+    }
+  </script>
+</body>
+</html>

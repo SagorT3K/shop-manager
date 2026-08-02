@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Local database (contains your shop data — keep it out of the repo)
+bikroy_web.db
+bikroy_web.db-*
+
+# Logs
+*.log
+server.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

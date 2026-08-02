@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Customer - Bikroy Hisab</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="main">
+      <header class="topbar" id="topbar"></header>
+      <main class="content">
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
+          <a href="/customers.html" class="btn btn-ghost btn-sm">← <span data-i18n="back">ফিরে যান</span></a>
+          <button class="btn btn-outline btn-sm" onclick="location.href='/customers.html?edit=' + getCustomerId()">✏️ <span data-i18n="edit">সম্পাদনা</span></button>
+          <button class="btn btn-primary btn-sm" onclick="location.href='/add-due.html?id=' + getCustomerId()">＋ <span data-i18n="addDue">বাকি যোগ</span></button>
+          <button class="btn btn-success btn-sm" onclick="openPaymentModal()">💰 <span data-i18n="recordPayment">পেমেন্ট গ্রহণ</span></button>
+        </div>
+
+        <div id="customerInfo"></div>
+
+        <div class="detail-summary" id="summaryBoxes"></div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 20px;" class="two-col">
+          <div class="card">
+            <div class="card-title" data-i18n="dueHistory">বাকির ইতিহাস</div>
+            <div id="dueList"></div>
+          </div>
+          <div class="card">
+            <div class="card-title" data-i18n="payments">পেমেন্ট</div>
+            <div id="paymentList"></div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Payment modal -->
+  <div class="modal" id="paymentModal">
+    <div class="modal-card">
+      <div class="modal-title" data-i18n="recordPayment">পেমেন্ট গ্রহণ</div>
+      <div class="form-group">
+        <label data-i18n="paymentAmount">পেমেন্টের পরিমাণ</label>
+        <input type="number" id="payAmount" class="form-control" min="0" step="0.01">
+      </div>
+      <div class="form-group">
+        <label data-i18n="paymentNote">নোট (ঐচ্ছিক)</label>
+        <textarea id="payNote" class="form-control"></textarea>
+      </div>
+      <div id="paymentMessagePreview"></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal('paymentModal')" data-i18n="cancel">বাতিল</button>
+        <button class="btn btn-success" onclick="savePayment()" data-i18n="save">সংরক্ষণ</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="confirmModal">
+    <div class="modal-card">
+      <div class="modal-title" data-i18n="confirm">নিশ্চিত করুন</div>
+      <p id="confirmModalText" style="margin-bottom:8px;"></p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="confirmModalCancel" data-i18n="cancel">বাতিল</button>
+        <button class="btn btn-danger" id="confirmModalOk" data-i18n="delete">মুছুন</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/i18n.js"></script>
+  <script src="/js/app.js"></script>
+  <script>
+    initApp('customers')
+      .then(loadCustomer)
+      .catch(err => toast(err.message, 'error'));
+
+    function getCustomerId() { return new URLSearchParams(window.location.search).get('id'); }
+
+    let customer = null;
+
+    async function loadCustomer() {
+      const id = getCustomerId();
+      if (!id) { window.location.href = '/customers.html'; return; }
+      customer = await API.get(`/api/customers/${id}`);
+      renderInfo();
+      renderSummary();
+      renderDues();
+      renderPayments();
+    }
+
+    function renderInfo() {
+      document.getElementById('customerInfo').innerHTML = `
+        <div class="card">
+          <div class="detail-hero">
+            <div class="list-item-avatar">${esc((customer.name || '?').charAt(0).toUpperCase())}</div>
+            <div style="flex:1; min-width:200px;">
+              <div style="font-size:20px; font-weight:800;">${esc(customer.name)}</div>
+              <div style="color:var(--text-secondary); font-size:14px;">
+                📞 ${esc(customer.phone || '—')}${customer.email ? ` &nbsp;·&nbsp; ✉️ ${esc(customer.email)}` : ''}
+              </div>
+              ${customer.address ? `<div style="color:var(--text-secondary); font-size:14px;">📍 ${esc(customer.address)}</div>` : ''}
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function renderSummary() {
+      document.getElementById('summaryBoxes').innerHTML = `
+        <div class="summary-box due">
+          <div class="summary-label" data-i18n="totalDueLabel">মোট বাকি</div>
+          <div class="summary-value">${formatCurrency(customer.totalDue)}</div>
+        </div>
+        <div class="summary-box paid">
+          <div class="summary-label" data-i18n="totalPaidLabel">মোট পরিশোধ</div>
+          <div class="summary-value">${formatCurrency(customer.totalPaid)}</div>
+        </div>`;
+      applyI18n(document.getElementById('summaryBoxes'));
+    }
+
+    function statusBadge(status) {
+      if (status === 'paid') return `<span class="badge badge-success" data-i18n="dueStatusPaid">পরিশোধিত</span>`;
+      if (status === 'partial') return `<span class="badge badge-warning" data-i18n="dueStatusPartial">আংশিক</span>`;
+      return `<span class="badge badge-danger" data-i18n="dueStatusUnpaid">বাকি</span>`;
+    }
+
+    function renderDues() {
+      const container = document.getElementById('dueList');
+      if (!customer.dues.length) {
+        container.innerHTML = `<div class="empty-state"><div class="empty-icon">📄</div><div data-i18n="noDues">কোনো বাকি নেই</div></div>`;
+        applyI18n();
+        return;
+      }
+      container.innerHTML = customer.dues.map(d => `
+        <div class="transaction-row">
+          <div class="tx-main">
+            <div class="tx-title">${esc(d.productName)}</div>
+            <div class="tx-sub">${formatDate(d.date)}${d.note ? ` · ${esc(d.note)}` : ''}</div>
+            ${statusBadge(d.status)}
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="tx-amount ${d.status === 'paid' ? 'amount-positive' : 'amount-negative'}">${formatCurrency(d.amount)}</div>
+            ${d.status !== 'paid' ? `
+            <button class="icon-btn" title="${t('markPaid')}" onclick="markDuePaid(${d.id})">✅</button>` : ''}
+            <button class="icon-btn danger" title="${t('deleteDue')}" onclick="deleteDue(${d.id})">🗑️</button>
+          </div>
+        </div>`).join('');
+      applyI18n();
+    }
+
+    function renderPayments() {
+      const container = document.getElementById('paymentList');
+      if (!customer.payments.length) {
+        container.innerHTML = `<div class="empty-state"><div class="empty-icon">💰</div><div data-i18n="noPayments">কোনো পেমেন্ট নেই</div></div>`;
+        applyI18n();
+        return;
+      }
+      container.innerHTML = customer.payments.map(p => `
+        <div class="transaction-row">
+          <div class="tx-main">
+            <div class="tx-title" style="color:var(--success);">${formatCurrency(p.amount)}</div>
+            <div class="tx-sub">${formatDateTime(p.date)}${p.note ? ` · ${esc(p.note)}` : ''}</div>
+          </div>
+          <button class="icon-btn danger" title="${t('deletePayment')}" onclick="deletePayment(${p.id})">🗑️</button>
+        </div>`).join('');
+      applyI18n();
+    }
+
+    function openPaymentModal() {
+      document.getElementById('payAmount').value = '';
+      document.getElementById('payNote').value = '';
+      updatePaymentPreview();
+      openModal('paymentModal');
+      setTimeout(() => document.getElementById('payAmount').focus(), 50);
+    }
+
+    function updatePaymentPreview() {
+      const amount = document.getElementById('payAmount').value;
+      const preview = document.getElementById('paymentMessagePreview');
+      if (amount && Number(amount) > 0) {
+        preview.innerHTML = `
+          <div class="message-preview">${esc(buildPaymentMessage(customer.name, amount))}</div>
+          <div class="notify-actions">
+            <button class="btn btn-whatsapp btn-sm" onclick="openWhatsApp('${esc(customer.phone)}', buildPaymentMessage('${esc(customer.name).replace(/'/g, "\\'")}', document.getElementById('payAmount').value))">${t('whatsapp')}</button>
+            <button class="btn btn-email btn-sm" onclick="openEmail('${esc(customer.email)}', '${t('paymentType')}', buildPaymentMessage('${esc(customer.name).replace(/'/g, "\\'")}', document.getElementById('payAmount').value))">${t('emailBtn')}</button>
+            <button class="btn btn-outline btn-sm" onclick="copyText(buildPaymentMessage('${esc(customer.name).replace(/'/g, "\\'")}', document.getElementById('payAmount').value))">${t('copySms')}</button>
+          </div>`;
+      } else {
+        preview.innerHTML = '';
+      }
+    }
+    document.getElementById('payAmount').addEventListener('input', updatePaymentPreview);
+
+    async function savePayment() {
+      const amount = document.getElementById('payAmount').value;
+      if (!amount || Number(amount) <= 0) { toast(t('enterValidAmount'), 'error'); return; }
+      try {
+        await API.post('/api/payments', {
+          customerId: customer.id,
+          amount: Number(amount),
+          note: document.getElementById('payNote').value.trim()
+        });
+        closeModal('paymentModal');
+        toast(t('paymentSuccess'));
+        await loadCustomer();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    async function markDuePaid(id) {
+      try {
+        await API.put(`/api/dues/${id}/status`, { status: 'paid' });
+        toast(t('saveSuccess'));
+        await loadCustomer();
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
+    function deleteDue(id) {
+      confirmDialog(t('deleteConfirm') + '?', async () => {
+        try {
+          await API.del(`/api/dues/${id}`);
+          toast(t('deleteSuccess'));
+          await loadCustomer();
+        } catch (err) { toast(err.message, 'error'); }
+      });
+    }
+
+    function deletePayment(id) {
+      confirmDialog(t('deleteConfirm') + '?', async () => {
+        try {
+          await API.del(`/api/payments/${id}`);
+          toast(t('deleteSuccess'));
+          await loadCustomer();
+        } catch (err) { toast(err.message, 'error'); }
+      });
+    }
+  </script>
+</body>
+</html>

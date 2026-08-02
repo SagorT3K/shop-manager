@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings - Bikroy Hisab</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="main">
+      <header class="topbar" id="topbar"></header>
+      <main class="content">
+        <div style="max-width:640px; margin:0 auto;">
+          <div class="card">
+            <div class="card-title" data-i18n="language">ভাষা ও মুদ্রা</div>
+            <div class="setting-row">
+              <div>
+                <div style="font-weight:600;" data-i18n="language">ভাষা</div>
+                <div class="list-item-sub" data-i18n="loggedInAs">লগইন করেছেন</div>
+              </div>
+              <div style="display:flex; gap:8px;">
+                <button class="btn btn-sm btn-outline" onclick="setLang('bn'); location.reload();" data-i18n="bengali">বাংলা</button>
+                <button class="btn btn-sm btn-outline" onclick="setLang('en'); location.reload();" data-i18n="english">ইংরেজি</button>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div>
+                <div style="font-weight:600;" data-i18n="currency">মুদ্রা</div>
+                <div class="list-item-sub" data-i18n="currencyDesc">অ্যাপ জুড়ে ব্যবহৃত মুদ্রার প্রতীক</div>
+              </div>
+              <select id="currencySelectSettings" class="currency-select" style="max-width:220px;"></select>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title" data-i18n="backup">ডেটা ব্যাকআপ</div>
+            <div class="setting-row">
+              <div>
+                <div style="font-weight:600;" data-i18n="backup">ডেটা ব্যাকআপ</div>
+                <div class="list-item-sub" data-i18n="backupDesc">সম্পূর্ণ ডেটাবেস একটি ফাইল হিসেবে ডাউনলোড করুন</div>
+              </div>
+              <button class="btn btn-primary btn-sm" onclick="downloadBackup()">⬇️ <span data-i18n="downloadBackup">ব্যাকআপ ডাউনলোড</span></button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title" data-i18n="about">অ্যাপ সম্পর্কে</div>
+            <div style="text-align:center; padding:12px 0;">
+              <div style="font-size:40px;">🧾</div>
+              <div style="font-size:20px; font-weight:800; color:var(--primary-dark);" data-i18n="appName">বিক্রয় হিসাব</div>
+              <div class="list-item-sub" data-i18n="version">ভার্সন</div>
+              <div class="list-item-sub" style="margin-top:6px;" data-i18n="appTagline">দোকান ব্যবস্থাপনা সিস্টেম</div>
+              <div class="list-item-sub" style="margin-top:14px;" data-i18n="footer">© ২০২৪ বিক্রয় হিসাব</div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="/js/i18n.js"></script>
+  <script src="/js/app.js"></script>
+  <script>
+    initApp('settings').catch(err => toast(err.message, 'error'));
+
+    // Populate the currency selector with all supported currencies
+    const curSelect = document.getElementById('currencySelectSettings');
+    CURRENCIES.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.code;
+      opt.textContent = `${c.symbol} ${c.code} — ${getLang() === 'bn' ? c.bnName : c.enName}`;
+      if (c.code === getCurrency()) opt.selected = true;
+      curSelect.appendChild(opt);
+    });
+    curSelect.addEventListener('change', () => {
+      setCurrency(curSelect.value);
+      location.reload();
+    });
+
+    function downloadBackup() {
+      const a = document.createElement('a');
+      a.setAttribute('download', '');
+      // Fetch (session cookie is sent automatically), then download as blob
+      fetch('/api/backup')
+        .then(res => {
+          if (!res.ok) throw new Error('Backup failed');
+          return res.blob();
+        })
+        .then(blob => {
+          const url = URL.createObjectURL(blob);
+          const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+          a.href = url;
+          a.download = `bikroy_hisab_backup_${stamp}.db`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+          toast(t('backupSuccess'));
+        })
+        .catch(err => toast(err.message, 'error'));
+    }
+  </script>
+</body>
+</html>

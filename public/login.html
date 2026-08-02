@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Bikroy Hisab</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="login-page">
+    <div class="login-card">
+      <div style="text-align:right; margin-bottom:8px;">
+        <button id="langToggle" class="lang-toggle" title="Language"></button>
+      </div>
+      <div class="login-brand">
+        <div class="brand-icon">🧾</div>
+        <h1 data-i18n="appName">বিক্রয় হিসাব</h1>
+        <p data-i18n="appTagline">দোকান ব্যবস্থাপনা সিস্টেম</p>
+      </div>
+      <form id="loginForm">
+        <div class="form-group">
+          <label for="username" data-i18n="username">ব্যবহারকারীর নাম</label>
+          <input type="text" id="username" class="form-control" autocomplete="username" data-i18n-placeholder="username">
+        </div>
+        <div class="form-group">
+          <label for="password" data-i18n="password">পাসওয়ার্ড</label>
+          <input type="password" id="password" class="form-control" autocomplete="current-password" data-i18n-placeholder="password">
+        </div>
+        <div id="loginError" style="color: var(--danger); font-size: 13px; margin-bottom: 12px; display: none;"></div>
+        <button type="submit" class="btn btn-primary btn-block" id="loginBtn" data-i18n="login">লগইন</button>
+      </form>
+      <div style="text-align:center; margin-top:16px; font-size:14px;">
+        <span data-i18n="noAccount">অ্যাকাউন্ট নেই?</span>
+        <a href="/signup.html" data-i18n="signup">নিবন্ধন</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/i18n.js"></script>
+  <script>
+    // Verify existing session via the cookie (server-side); if valid, go to dashboard
+    fetch('/api/auth/me')
+      .then(res => { if (res.ok) window.location.href = '/dashboard.html'; })
+      .catch(() => {});
+
+    initLangToggle();
+    applyI18n();
+
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+      const errorEl = document.getElementById('loginError');
+      const btn = document.getElementById('loginBtn');
+
+      errorEl.style.display = 'none';
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          errorEl.textContent = data.error === 'Account is disabled. Contact the administrator.'
+            ? t('accountDisabled') : t('invalidCredentials');
+          errorEl.style.display = 'block';
+          return;
+        }
+        window.location.href = '/dashboard.html';
+      } catch (err) {
+        errorEl.textContent = t('invalidCredentials');
+        errorEl.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

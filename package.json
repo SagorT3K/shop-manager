@@ -1,0 +1,17 @@
+{
+  "name": "bikroy-hisab-web",
+  "version": "1.0.0",
+  "description": "Bikroy Hisab - Shop management system (web) with admin panel, bilingual EN/BN",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}

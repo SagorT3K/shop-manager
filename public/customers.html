@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Customers - Bikroy Hisab</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="main">
+      <header class="topbar" id="topbar"></header>
+      <main class="content">
+        <div class="card">
+          <div class="card-title">
+            <span data-i18n="customerList">গ্রাহক তালিকা</span>
+            <button class="btn btn-primary btn-sm" onclick="openCustomerModal()">＋ <span data-i18n="addNewCustomer">নতুন গ্রাহক যোগ</span></button>
+          </div>
+          <div class="search-bar">
+            <input type="text" id="searchInput" class="form-control" data-i18n-placeholder="searchCustomers" oninput="debouncedSearch()">
+          </div>
+          <div id="customerList"></div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Customer add/edit modal -->
+  <div class="modal" id="customerModal">
+    <div class="modal-card">
+      <div class="modal-title" id="customerModalTitle" data-i18n="addNewCustomer">নতুন গ্রাহক যোগ</div>
+      <input type="hidden" id="customerId">
+      <div class="form-group">
+        <label data-i18n="customerName">গ্রাহকের নাম</label>
+        <input type="text" id="fName" class="form-control" data-i18n-placeholder="customerName">
+      </div>
+      <div class="form-group">
+        <label data-i18n="phone">মোবাইল নম্বর</label>
+        <input type="tel" id="fPhone" class="form-control" data-i18n-placeholder="phone">
+      </div>
+      <div class="form-group">
+        <label data-i18n="email">ইমেইল</label>
+        <input type="email" id="fEmail" class="form-control" data-i18n-placeholder="email">
+      </div>
+      <div class="form-group">
+        <label data-i18n="address">ঠিকানা</label>
+        <textarea id="fAddress" class="form-control" data-i18n-placeholder="address"></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal('customerModal')" data-i18n="cancel">বাতিল</button>
+        <button class="btn btn-primary" onclick="saveCustomer()" id="saveCustomerBtn" data-i18n="save">সংরক্ষণ</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="confirmModal">
+    <div class="modal-card">
+      <div class="modal-title" data-i18n="confirm">নিশ্চিত করুন</div>
+      <p id="confirmModalText" style="margin-bottom:8px;"></p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="confirmModalCancel" data-i18n="cancel">বাতিল</button>
+        <button class="btn btn-danger" id="confirmModalOk" data-i18n="delete">মুছুন</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/i18n.js"></script>
+  <script src="/js/app.js"></script>
+  <script>
+    initApp('customers').catch(err => toast(err.message, 'error'));
+
+    // Support direct edit via ?edit=<id> (linked from customer detail page)
+    const editId = new URLSearchParams(window.location.search).get('edit');
+    if (editId) {
+      loadCustomers().then(() => openCustomerModal(Number(editId)));
+    }
+
+    let customers = [];
+    let searchTimer = null;
+
+    function debouncedSearch() {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(loadCustomers, 300);
+    }
+
+    async function loadCustomers() {
+      const q = document.getElementById('searchInput').value.trim();
+      customers = await API.get('/api/customers' + (q ? `?q=${encodeURIComponent(q)}` : ''));
+      renderCustomers();
+    }
+
+    function renderCustomers() {
+      const container = document.getElementById('customerList');
+      if (!customers.length) {
+        container.innerHTML = `<div class="empty-state"><div class="empty-icon">👥</div><div data-i18n="noCustomers">কোনো গ্রাহক পাওয়া যায়নি</div></div>`;
+        applyI18n();
+        return;
+      }
+      container.innerHTML = customers.map(c => `
+        <div class="list-item" onclick="window.location.href='/customer-detail.html?id=${c.id}'">
+          <div class="list-item-main">
+            <div class="list-item-avatar">${esc(c.name.charAt(0).toUpperCase())}</div>
+            <div>
+              <div class="list-item-title">${esc(c.name)}</div>
+              <div class="list-item-sub">📞 ${esc(c.phone || '—')}${c.email ? ` · ✉️ ${esc(c.email)}` : ''}</div>
+              ${c.address ? `<div class="list-item-sub">📍 ${esc(c.address)}</div>` : ''}
+            </div>
+          </div>
+          <div class="list-item-actions" onclick="event.stopPropagation()">
+            <button class="icon-btn" title="Edit" onclick="openCustomerModal(${c.id})">✏️</button>
+            <button class="icon-btn danger" title="Delete" onclick="deleteCustomer(${c.id}, '${esc(c.name).replace(/'/g, "\\'")}')">🗑️</button>
+          </div>
+        </div>`).join('');
+      applyI18n();
+    }
+
+    function openCustomerModal(id) {
+      const modal = document.getElementById('customerModal');
+      document.getElementById('customerId').value = id || '';
+      document.getElementById('fName').value = '';
+      document.getElementById('fPhone').value = '';
+      document.getElementById('fEmail').value = '';
+      document.getElementById('fAddress').value = '';
+      if (id) {
+        const c = customers.find(x => x.id === id);
+        if (c) {
+          document.getElementById('fName').value = c.name;
+          document.getElementById('fPhone').value = c.phone;
+          document.getElementById('fEmail').value = c.email;
+          document.getElementById('fAddress').value = c.address;
+        }
+        document.getElementById('customerModalTitle').textContent = t('editCustomer');
+        document.getElementById('saveCustomerBtn').textContent = t('update');
+      } else {
+        document.getElementById('customerModalTitle').textContent = t('addNewCustomer');
+        document.getElementById('saveCustomerBtn').textContent = t('save');
+      }
+      openModal('customerModal');
+      setTimeout(() => document.getElementById('fName').focus(), 50);
+    }
+
+    async function saveCustomer() {
+      const id = document.getElementById('customerId').value;
+      const name = document.getElementById('fName').value.trim();
+      if (!name) { toast(t('nameRequired'), 'error'); return; }
+      const body = {
+        name,
+        phone: document.getElementById('fPhone').value.trim(),
+        email: document.getElementById('fEmail').value.trim(),
+        address: document.getElementById('fAddress').value.trim()
+      };
+      try {
+        if (id) {
+          await API.put(`/api/customers/${id}`, body);
+        } else {
+          await API.post('/api/customers', body);
+        }
+        closeModal('customerModal');
+        toast(t('saveSuccess'));
+        await loadCustomers();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    function deleteCustomer(id, name) {
+      confirmDialog(`${t('deleteCustomerConfirm')} (${name})`, async () => {
+        try {
+          await API.del(`/api/customers/${id}`);
+          toast(t('deleteSuccess'));
+          await loadCustomers();
+        } catch (err) {
+          toast(err.message, 'error');
+        }
+      });
+    }
+
+    loadCustomers().catch(err => toast(err.message, 'error'));
+  </script>
+</body>
+</html>

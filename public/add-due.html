@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Add Due - Bikroy Hisab</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="main">
+      <header class="topbar" id="topbar"></header>
+      <main class="content">
+        <div style="max-width:560px; margin:0 auto;">
+          <div style="margin-bottom:16px;">
+            <a href="/customer-detail.html?id=" id="backLink" class="btn btn-ghost btn-sm">← <span data-i18n="back">ফিরে যান</span></a>
+          </div>
+
+          <div class="card">
+            <div class="card-title" data-i18n="newDue">নতুন বাকি</div>
+            <div id="customerBanner"></div>
+            <div class="form-group">
+              <label data-i18n="productName">পণ্যের নাম</label>
+              <input type="text" id="fProduct" class="form-control" data-i18n-placeholder="productName">
+            </div>
+            <div class="form-group">
+              <label data-i18n="amount">পরিমাণ (টাকা)</label>
+              <input type="number" id="fAmount" class="form-control" min="0" step="0.01">
+            </div>
+            <div class="form-group">
+              <label data-i18n="note">নোট (ঐচ্ছিক)</label>
+              <textarea id="fNote" class="form-control"></textarea>
+            </div>
+            <button class="btn btn-primary btn-block" onclick="saveDue()" id="saveDueBtn" data-i18n="saveDue">বাকি সংরক্ষণ</button>
+          </div>
+
+          <!-- Notification panel, shown after saving -->
+          <div class="card" id="notifyCard" style="display:none;">
+            <div class="card-title" data-i18n="notifyVia">গ্রাহককে জানান</div>
+            <div id="notifyCustomer"></div>
+            <div class="message-preview" id="notifyMessage"></div>
+            <div class="notify-actions">
+              <button class="btn btn-whatsapp" onclick="sendWhatsApp()">🟢 <span data-i18n="sendViaWhatsApp">হোয়াটসঅ্যাপে পাঠান</span></button>
+              <button class="btn btn-email" onclick="sendEmail()">✉️ <span data-i18n="sendViaEmail">জিমেইলে পাঠান</span></button>
+              <button class="btn btn-outline" onclick="copyMessage()">📋 <span data-i18n="copyMessage">মেসেজ কপি করুন</span></button>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="/js/i18n.js"></script>
+  <script src="/js/app.js"></script>
+  <script>
+    initApp('customers')
+      .then(init)
+      .catch(err => toast(err.message, 'error'));
+
+    const customerId = new URLSearchParams(window.location.search).get('id');
+    if (!customerId) { window.location.href = '/customers.html'; }
+    document.getElementById('backLink').href = `/customer-detail.html?id=${customerId}`;
+
+    let customer = null;
+    let savedDue = null;
+
+    async function init() {
+      customer = await API.get(`/api/customers/${customerId}`);
+      document.getElementById('customerBanner').innerHTML = `
+        <div style="background:var(--primary-light); border-radius:10px; padding:12px 14px; margin-bottom:16px; font-weight:600; color:var(--primary-dark);">
+          👤 <span data-i18n="customer">গ্রাহক</span>: ${esc(customer.name)}${customer.phone ? ` · 📞 ${esc(customer.phone)}` : ''}
+        </div>`;
+      applyI18n(document.getElementById('customerBanner'));
+    }
+
+    async function saveDue() {
+      const productName = document.getElementById('fProduct').value.trim();
+      const amount = document.getElementById('fAmount').value;
+      if (!productName) { toast(t('productNameRequired'), 'error'); return; }
+      if (!amount || Number(amount) <= 0) { toast(t('enterValidAmount'), 'error'); return; }
+
+      try {
+        await API.post('/api/dues', {
+          customerId: Number(customerId),
+          productName,
+          amount: Number(amount),
+          note: document.getElementById('fNote').value.trim()
+        });
+        toast(t('dueSuccess'));
+        showNotifyPanel(productName, Number(amount));
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    function showNotifyPanel(productName, amount) {
+      savedDue = { productName, amount };
+      const message = buildDueMessage(customer.name, amount, productName, Date.now());
+      document.getElementById('notifyCustomer').innerHTML = `
+        <div class="tx-title">${esc(customer.name)}</div>
+        <div class="tx-sub">${esc(customer.phone || '')}${customer.email ? ` · ${esc(customer.email)}` : ''}</div>
+        <div style="margin:8px 0; font-weight:600;">${esc(productName)} — ${formatCurrency(amount)}</div>`;
+      document.getElementById('notifyMessage').textContent = message;
+      document.getElementById('notifyCard').style.display = 'block';
+      // Reset form for another entry
+      document.getElementById('fProduct').value = '';
+      document.getElementById('fAmount').value = '';
+      document.getElementById('fNote').value = '';
+      document.getElementById('notifyCard').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function buildMessage() {
+      return buildDueMessage(customer.name, savedDue.amount, savedDue.productName, Date.now());
+    }
+
+    function sendWhatsApp() { openWhatsApp(customer.phone, buildMessage()); }
+    function sendEmail() {
+      openEmail(customer.email, `বাকি রিমাইন্ডার - ${savedDue.productName}`, buildMessage());
+    }
+    async function copyMessage() { await copyText(buildMessage()); }
+  </script>
+</body>
+</html>
