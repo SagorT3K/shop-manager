@@ -5,6 +5,14 @@ credit sales (dues/বাকি), payments, sales history, and send due notifica
 via WhatsApp, Gmail, or a copyable SMS template. Bilingual UI (English + Bengali),
 with a login system and an admin panel for user management.
 
+[![Node.js](https://img.shields.io/badge/Node.js-22.5%2B-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org)
+[![Express](https://img.shields.io/badge/Express-4-000000?style=flat-square&logo=express&logoColor=white)](https://expressjs.com)
+[![SQLite](https://img.shields.io/badge/SQLite-node%3Asqlite-003B57?style=flat-square&logo=sqlite&logoColor=white)](https://nodejs.org/api/sqlite.html)
+[![UI](https://img.shields.io/badge/UI-English%20%2B%20%E0%A6%AC%E0%A6%BE%E0%A6%82%E0%A6%B2%E0%A6%BE-2ea44f?style=flat-square)](.)
+
+No front-end framework and no build step: Express serves the static pages in `public/`
+plus a JSON API from the same origin.
+
 ## Requirements
 
 - **Node.js 22.5+** (uses the built-in `node:sqlite` module — no native compilation needed)
@@ -18,7 +26,13 @@ npm start
 
 Then open **http://localhost:3000** in a browser.
 
-> Port can be changed with the `PORT` environment variable.
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PORT` | `3000` | HTTP port |
+| `JWT_SECRET` | `bikroy-hisab-web-secret-change-me` | Signs the session cookie — **change this in production** |
+
+On first start the database file (`bikroy_web.db`) is created, the schema is applied and
+the default admin account is seeded.
 
 ## Sign up / Login
 
